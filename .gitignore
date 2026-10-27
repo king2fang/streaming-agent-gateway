@@ -23,11 +23,12 @@ data/
 # Env
 .env
 
-# VSCode (keep only 3 configs)
-.vscode/*
-!.vscode/settings.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# Local editor configuration
+.vscode/
+
+# Development scripts not required by the distributable project
+bootstrap_*.py
+fix_*.py
 
 # OS
 .DS_Store
