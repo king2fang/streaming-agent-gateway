@@ -41,20 +41,20 @@
 flowchart LR
     Browser["浏览器 Web UI"]
     CLI["sag CLI"]
-    API["FastAPI<br/>运行管理 API"]
-    Registry["RunRegistry<br/>内存事件缓冲"]
-    Agent["Agent Loop<br/>工具调用与轮次控制"]
-    Models["模型适配器<br/>Mock / DeepSeek / Qwen"]
-    Tools["内置工具<br/>calculator / echo"]
+    API["FastAPI 运行管理 API"]
+    Registry["RunRegistry 内存事件缓冲"]
+    Agent["Agent Loop 工具调用与轮次控制"]
+    Models["模型适配器：Mock、DeepSeek、Qwen"]
+    Tools["内置工具：calculator、echo"]
 
-    Browser -->|"创建 / 取消运行"| API
-    CLI -->|"HTTP"| API
+    Browser -->|创建或取消运行| API
+    CLI -->|HTTP| API
     API --> Registry
     API --> Agent
     Agent --> Models
     Agent --> Tools
-    Registry -->|"SSE 事件流"| Browser
-    Registry -->|"SSE 事件流"| CLI
+    Registry -->|SSE 事件流| Browser
+    Registry -->|SSE 事件流| CLI
 ```
 
 ### 一次运行的事件流
