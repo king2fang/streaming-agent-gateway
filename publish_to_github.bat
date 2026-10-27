@@ -37,17 +37,17 @@ if errorlevel 1 goto :failed
 git rm --cached --ignore-unmatch -- bootstrap_*.py fix_*.py .env
 if errorlevel 1 goto :failed
 
-echo Staging the project source, tests, documentation, and configuration...
-git add -A -- .gitignore .gitattributes .env.example README.md pyproject.toml app tests publish_to_github.bat
+echo Staging all non-ignored project files, including this script...
+git add -A
 if errorlevel 1 goto :failed
 
 git diff --cached --quiet
 if not errorlevel 1 (
     echo No new file changes are staged.
-    echo Any commit waiting to be uploaded will be shown below.
+    echo Checking for commits that still need to be uploaded...
     git status --short --branch
     echo.
-    choice /C YN /M "Push already committed changes to origin/%BRANCH%"
+    choice /C YN /M "Push committed changes to origin/%BRANCH%"
     if errorlevel 2 (
         echo Cancelled. No push was attempted.
         pause
@@ -76,9 +76,8 @@ if errorlevel 1 goto :failed
 :push
 git push -u origin "%BRANCH%"
 if errorlevel 1 (
-    echo ERROR: Push failed. Your local commit is still safe.
-    echo Run this file from a terminal with GitHub authentication configured.
-    echo Check your network and whether the remote branch has new commits.
+    echo ERROR: Push failed. Any local commit is still safe.
+    echo Check GitHub authentication, network access, and remote branch status.
     pause
     exit /b 1
 )
