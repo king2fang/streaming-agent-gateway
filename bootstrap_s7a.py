@@ -1,0 +1,67 @@
+"""S7a: CLI entry point and argparse."""
+import sys
+from pathlib import Path
+
+FILES = {
+
+"app/cli/__init__.py": "",
+
+"app/cli/__main__.py": r'''"""CLI entrypoint: sag run / watch / cancel / list."""
+import argparse
+import sys
+from .runner import run_cmd, watch_cmd, cancel_cmd, list_cmd
+
+def main():
+    parser = argparse.ArgumentParser(description="Streaming Agent Gateway CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # run
+    p_run = subparsers.add_parser("run", help="Create a run and stream output")
+    p_run.add_argument("--model", default="mock", help="Model name (default: mock)")
+    p_run.add_argument("--prompt", required=True, help="User prompt")
+    p_run.add_argument("--tools", action="store_true", help="Enable mock tools")
+    p_run.set_defaults(func=run_cmd)
+
+    # watch
+    p_watch = subparsers.add_parser("watch", help="Watch an existing run")
+    p_watch.add_argument("run_id", help="The Run ID to watch")
+    p_watch.add_argument("--last-id", type=int, default=0, help="Last-Event-ID to resume from")
+    p_watch.set_defaults(func=watch_cmd)
+
+    # cancel
+    p_cancel = subparsers.add_parser("cancel", help="Cancel a running run")
+    p_cancel.add_argument("run_id", help="The Run ID to cancel")
+    p_cancel.set_defaults(func=cancel_cmd)
+
+    # list
+    p_list = subparsers.add_parser("list", help="List recent runs")
+    p_list.set_defaults(func=list_cmd)
+
+    args = parser.parse_args()
+    args.func(args)
+
+if __name__ == "__main__":
+    main()
+''',
+
+}
+
+
+def main():
+    root = Path.cwd()
+    if not (root / "pyproject.toml").exists():
+        if (root / "streaming-agent-gateway").exists():
+            root = root / "streaming-agent-gateway"
+        else:
+            sys.exit(f"not a gateway project: {root}")
+    for rel, content in FILES.items():
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8", newline="\n")
+        print(f"  + {rel:28s} {content.count(chr(10)):3d} lines")
+    print(f"\nDone: {len(FILES)} files")
+    print("Next: run bootstrap_s7b.py")
+
+
+if __name__ == "__main__":
+    main()
