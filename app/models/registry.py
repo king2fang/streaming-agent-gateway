@@ -6,10 +6,10 @@ from app.config import settings
 
 class ModelRegistry:
     @staticmethod
-    def get(name: str, script: str = "chat") -> StreamingModel:
+    def get(name: str, script: str = "chat", fault: str = "none") -> StreamingModel:
         if name.startswith("deepseek"):
             return DeepSeekAdapter()
         elif name.startswith("qwen"):
             return QwenAdapter()
         else:
-            return MockModel(name=name, script=script)
+            return MockModel(name=name, script=script, fault=fault)

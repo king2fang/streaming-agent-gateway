@@ -12,7 +12,6 @@ BASE_URL = "http://127.0.0.1:8000"
 console = Console()
 
 def _parse_sse(lines):
-    """Yield (id, event, data) tuples from an iterable of lines."""
     eid, event, data = None, "message", []
     for line in lines:
         if not line:
@@ -28,22 +27,17 @@ def _parse_sse(lines):
         elif line.startswith("data: "):
             data.append(line[6:])
         elif line.startswith(": "):
-            pass # ping
+            pass
 
 
 def _stream_sse(run_id: str, last_id: int):
     headers = {"Last-Event-ID": str(last_id)} if last_id > 0 else {}
-    
     layout = Layout()
-    layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="body")
-    )
+    layout.split_column(Layout(name="header", size=3), Layout(name="body"))
     
     status_text = Text("Initializing...", style="bold yellow")
     output_text = Text()
     reasoning_text = Text()
-    
     layout["header"].update(Panel(status_text, title="Run Status", border_style="blue"))
     
     try:
@@ -59,9 +53,6 @@ def _stream_sse(run_id: str, last_id: int):
 
                     for eid, event, data in _parse_sse(resp.iter_lines()):
                         if data == "[DONE]":
-                            status_text.plain = "Completed"
-                            status_text.style = "bold green"
-                            layout["header"].update(Panel(status_text, title="Run Status", border_style="green"))
                             live.update(layout)
                             break
                             
@@ -70,7 +61,6 @@ def _stream_sse(run_id: str, last_id: int):
                         except json.JSONDecodeError:
                             continue
 
-                        # 提取 OpenAI 兼容格式里的 delta 内容
                         delta = {}
                         if "choices" in parsed and len(parsed["choices"]) > 0:
                             delta = parsed["choices"][0].get("delta", {})
@@ -84,7 +74,6 @@ def _stream_sse(run_id: str, last_id: int):
                             status_text.plain = f"Model thinking (Turn {parsed.get('attempt')})..."
                             status_text.style = "bold yellow"
                             layout["header"].update(Panel(status_text, title="Run Status", border_style="yellow"))
-                            reasoning_text.append("", style="default")
                             
                         elif event == "reasoning.delta":
                             if "reasoning_content" in delta:
@@ -104,7 +93,8 @@ def _stream_sse(run_id: str, last_id: int):
                             live.update(layout)
                             
                         elif event == "error":
-                            status_text.plain = f"Error: {parsed['error']['message']}"
+                            err = parsed.get("error", {})
+                            status_text.plain = f"Error: {err.get('code')} - {err.get('message')}"
                             status_text.style = "bold red"
                             layout["header"].update(Panel(status_text, title="Run Status", border_style="red"))
                             live.update(layout)
@@ -124,6 +114,7 @@ def run_cmd(args):
     payload = {
         "model": args.model,
         "messages": [{"role": "user", "content": args.prompt}],
+        "metadata": {"fault": args.harness}
     }
     if args.tools:
         payload["tools"] = [{"type": "function", "function": {"name": "calculator"}}]

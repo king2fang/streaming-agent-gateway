@@ -28,12 +28,13 @@ async def create_run(req: CreateRunRequest):
     buf = registry.create(rid, req.model)
     
     script = req.metadata.get("script", "chat") if req.metadata else "chat"
+    fault = req.metadata.get("fault", "none") if req.metadata else "none"
+    
     try:
-        model = ModelRegistry.get(req.model, script)
+        model = ModelRegistry.get(req.model, script, fault)
     except Exception as e:
         raise HTTPException(400, {"code": "bad_model", "message": str(e)})
 
-    # 记录 Task 以便取消
     task = asyncio.create_task(run_agent(buf, model, req.messages, req.tools))
     _bg_tasks[rid] = task
     task.add_done_callback(lambda t: _bg_tasks.pop(rid, None))
@@ -62,10 +63,7 @@ async def cancel_run(run_id: str):
     if buf.done:
         return {"run_id": run_id, "status": buf.status.value}
     
-    # 触发取消事件
     buf.cancel_event.set()
-    
-    # 强制中断底层的 HTTP 任务
     task = _bg_tasks.get(run_id)
     if task and not task.done():
         task.cancel()

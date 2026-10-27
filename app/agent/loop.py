@@ -40,6 +40,10 @@ async def run_agent(buf: RunBuffer, model: StreamingModel, messages: list[dict],
                     finish_reason = evt.finish_reason
                     usage = evt.usage
 
+            # 故障注入兜底：如果流结束了却没有 finish_reason（且没有 tool_calls）
+            if not finish_reason and not pending_tool_calls:
+                raise ModelError("stream_interrupted", "Model stream ended unexpectedly without finish_reason", retryable=True)
+
             if finish_reason == "tool_calls" and pending_tool_calls:
                 tcs = [{"id": tc["id"], "type": "function", "function": {"name": tc["name"], "arguments": tc["args"]}} for tc in pending_tool_calls.values()]
                 messages.append({"role": "assistant", "tool_calls": tcs})
