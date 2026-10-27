@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.store import RunRegistry
-from app.fake_agent import FakeAgent
+from app.models.mock import MockModel
+from app.agent.loop import run_agent
 from app.chunk import to_sse_frames
 from app import sse
 from app.config import settings
@@ -25,6 +26,7 @@ def _spawn(coro) -> None:
 class CreateRunRequest(BaseModel):
     model: str = "mock"
     messages: list[dict]
+    tools: list[dict] | None = None
     metadata: dict | None = None
 
 
@@ -32,7 +34,12 @@ class CreateRunRequest(BaseModel):
 async def create_run(req: CreateRunRequest):
     rid = f"run-{uuid.uuid4().hex[:12]}"
     buf = registry.create(rid, req.model)
-    _spawn(FakeAgent(buf, req.messages).run())
+    
+    # S3: 实例化模型接入 AgentLoop
+    script = req.metadata.get("script", "chat") if req.metadata else "chat"
+    model = MockModel(name=req.model, script=script)
+    _spawn(run_agent(buf, model, req.messages, req.tools))
+    
     return {"run_id": rid, "status": "pending", "stream_url": f"/v1/runs/{rid}/stream"}
 
 
