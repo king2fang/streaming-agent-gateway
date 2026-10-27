@@ -1,4 +1,4 @@
-"""OpenAI-compatible streaming adapter (DeepSeek/Qwen)."""
+"""OpenAI-compatible streaming adapter."""
 import asyncio
 import json
 from typing import AsyncIterator
@@ -38,7 +38,7 @@ class OpenAICompatibleAdapter:
         if tools:
             payload["tools"] = tools
 
-        # 超时设置：连接10s，整体600s
+        # 超时设置：连接10s，总长300s
         timeout = httpx.Timeout(connect=10.0, read=None, write=10.0, pool=10.0)
 
         try:
@@ -51,10 +51,9 @@ class OpenAICompatibleAdapter:
                         body = await response.aread()
                         raise ModelError("api_error", f"HTTP {response.status_code}: {body[:200]}")
 
-                    # 解析 SSE 行
                     async for line in response.aiter_lines():
                         if cancel and cancel.is_set():
-                            return
+                            raise asyncio.CancelledError()
 
                         if not line.startswith("data: "):
                             continue
@@ -76,15 +75,12 @@ class OpenAICompatibleAdapter:
                         delta = choices[0].get("delta", {})
                         finish_reason = choices[0].get("finish_reason")
 
-                        # 1. 推理内容 (DeepSeek-R1 / QwQ)
                         if "reasoning_content" in delta and delta["reasoning_content"]:
                             yield ReasoningDelta(delta["reasoning_content"])
 
-                        # 2. 文本内容
                         if "content" in delta and delta["content"]:
                             yield ContentDelta(delta["content"])
 
-                        # 3. Tool Calls 增量
                         if "tool_calls" in delta:
                             for tc in delta["tool_calls"]:
                                 idx = tc.get("index", 0)
@@ -92,15 +88,15 @@ class OpenAICompatibleAdapter:
                                 fn = tc.get("function", {})
                                 name = fn.get("name")
                                 args = fn.get("arguments")
-                                
                                 if tc_id or name or args:
                                     yield ToolCallDelta(index=idx, id=tc_id, name=name, args_delta=args)
 
-                        # 4. 结束
                         if finish_reason:
                             yield Finish(finish_reason=finish_reason, usage=chunk.get("usage"))
                             return
 
+        except httpx.TimeoutException as e:
+            raise ModelError("timeout", f"Model request timed out: {str(e)}", retryable=True)
         except httpx.RequestError as e:
             raise ModelError("network_error", str(e), retryable=True)
         except asyncio.CancelledError:

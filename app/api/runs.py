@@ -13,13 +13,8 @@ from app.config import settings
 
 router = APIRouter(prefix="/v1")
 registry = RunRegistry()
-_bg: set = set()
+_bg_tasks: dict[str, asyncio.Task] = {}
 TERMINAL = {"run.completed", "run.failed", "run.cancelled"}
-
-def _spawn(coro) -> None:
-    t = asyncio.create_task(coro)
-    _bg.add(t)
-    t.add_done_callback(_bg.discard)
 
 class CreateRunRequest(BaseModel):
     model: str = "mock"
@@ -33,13 +28,16 @@ async def create_run(req: CreateRunRequest):
     buf = registry.create(rid, req.model)
     
     script = req.metadata.get("script", "chat") if req.metadata else "chat"
-    
     try:
         model = ModelRegistry.get(req.model, script)
     except Exception as e:
         raise HTTPException(400, {"code": "bad_model", "message": str(e)})
 
-    _spawn(run_agent(buf, model, req.messages, req.tools))
+    # 记录 Task 以便取消
+    task = asyncio.create_task(run_agent(buf, model, req.messages, req.tools))
+    _bg_tasks[rid] = task
+    task.add_done_callback(lambda t: _bg_tasks.pop(rid, None))
+
     return {"run_id": rid, "status": "pending", "stream_url": f"/v1/runs/{rid}/stream"}
 
 @router.get("/runs/{run_id}")
@@ -63,7 +61,15 @@ async def cancel_run(run_id: str):
         raise HTTPException(404, {"code": "not_found", "message": "run not found"})
     if buf.done:
         return {"run_id": run_id, "status": buf.status.value}
+    
+    # 触发取消事件
     buf.cancel_event.set()
+    
+    # 强制中断底层的 HTTP 任务
+    task = _bg_tasks.get(run_id)
+    if task and not task.done():
+        task.cancel()
+        
     return {"run_id": run_id, "status": "cancelling"}
 
 @router.get("/runs/{run_id}/stream")
