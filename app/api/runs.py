@@ -1,11 +1,11 @@
-"""Run endpoints: create / get / list / cancel / stream."""
+"""Run endpoints."""
 import asyncio
 import uuid
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from app.store import RunRegistry
-from app.models.mock import MockModel
+from app.models.registry import ModelRegistry
 from app.agent.loop import run_agent
 from app.chunk import to_sse_frames
 from app import sse
@@ -16,12 +16,10 @@ registry = RunRegistry()
 _bg: set = set()
 TERMINAL = {"run.completed", "run.failed", "run.cancelled"}
 
-
 def _spawn(coro) -> None:
     t = asyncio.create_task(coro)
     _bg.add(t)
     t.add_done_callback(_bg.discard)
-
 
 class CreateRunRequest(BaseModel):
     model: str = "mock"
@@ -29,19 +27,20 @@ class CreateRunRequest(BaseModel):
     tools: list[dict] | None = None
     metadata: dict | None = None
 
-
 @router.post("/runs")
 async def create_run(req: CreateRunRequest):
     rid = f"run-{uuid.uuid4().hex[:12]}"
     buf = registry.create(rid, req.model)
     
-    # S3: 实例化模型接入 AgentLoop
     script = req.metadata.get("script", "chat") if req.metadata else "chat"
-    model = MockModel(name=req.model, script=script)
-    _spawn(run_agent(buf, model, req.messages, req.tools))
     
-    return {"run_id": rid, "status": "pending", "stream_url": f"/v1/runs/{rid}/stream"}
+    try:
+        model = ModelRegistry.get(req.model, script)
+    except Exception as e:
+        raise HTTPException(400, {"code": "bad_model", "message": str(e)})
 
+    _spawn(run_agent(buf, model, req.messages, req.tools))
+    return {"run_id": rid, "status": "pending", "stream_url": f"/v1/runs/{rid}/stream"}
 
 @router.get("/runs/{run_id}")
 async def get_run(run_id: str):
@@ -51,13 +50,11 @@ async def get_run(run_id: str):
     return {"run_id": run_id, "status": buf.status.value, "model": buf.model,
             "created": buf.created, "seq": buf.seq}
 
-
 @router.get("/runs")
 async def list_runs(limit: int = 20, status: str | None = None):
     items = registry.list(limit, status)
     return {"runs": [{"run_id": b.run_id, "status": b.status.value,
                       "model": b.model, "created": b.created} for b in items]}
-
 
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: str):
@@ -68,7 +65,6 @@ async def cancel_run(run_id: str):
         return {"run_id": run_id, "status": buf.status.value}
     buf.cancel_event.set()
     return {"run_id": run_id, "status": "cancelling"}
-
 
 @router.get("/runs/{run_id}/stream")
 async def stream_run(run_id: str, request: Request):
@@ -84,7 +80,6 @@ async def stream_run(run_id: str, request: Request):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
 
 async def _gen(buf, last_seq: int, request: Request):
     earliest = buf.earliest_seq()

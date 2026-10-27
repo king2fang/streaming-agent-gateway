@@ -9,4 +9,13 @@ class Settings(BaseSettings):
     sse_heartbeat_seconds: int = 15
     max_turns: int = 8
 
+    # Real models
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_model: str = "deepseek-chat"
+
+    dashscope_api_key: str = ""
+    qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_model: str = "qwen-plus"
+
 settings = Settings()
