@@ -43,9 +43,17 @@ if errorlevel 1 goto :failed
 
 git diff --cached --quiet
 if not errorlevel 1 (
-    echo There are no changes to publish.
-    pause
-    exit /b 0
+    echo No new file changes are staged.
+    echo Any commit waiting to be uploaded will be shown below.
+    git status --short --branch
+    echo.
+    choice /C YN /M "Push already committed changes to origin/%BRANCH%"
+    if errorlevel 2 (
+        echo Cancelled. No push was attempted.
+        pause
+        exit /b 0
+    )
+    goto :push
 )
 
 echo.
@@ -65,10 +73,12 @@ if errorlevel 2 (
 git commit -m "Prepare public repository" -m "Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
 if errorlevel 1 goto :failed
 
+:push
 git push -u origin "%BRANCH%"
 if errorlevel 1 (
-    echo ERROR: The commit was created, but the push failed.
-    echo Check your network, GitHub credentials, and remote branch status.
+    echo ERROR: Push failed. Your local commit is still safe.
+    echo Run this file from a terminal with GitHub authentication configured.
+    echo Check your network and whether the remote branch has new commits.
     pause
     exit /b 1
 )
